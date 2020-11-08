@@ -1,69 +1,41 @@
-import requests
 from bs4 import BeautifulSoup
+import requests
 import pandas as pd
 
-"""
-Para realizar a solicitação à página temos que informar ao site que somos um navegador
-e é para isso que usamos a variável headers
-"""
-headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.106 Safari/537.36'}
+years_url = list(range(2004, 2020))
 
-# endereco_da_pagina representa o link que direciona a página com os dados
-endereco_da_pagina = "https://www.transfermarkt.co.uk/ajax-amsterdam/transferrekorde/verein/610/plus/1/galerie/0?saison_id=&pos=&detailpos=&altersklasse=&w_s="
+income_list = []
+income_per_club_list = []
+income_per_player_list = []
+year_list = []
 
-# no objeto_response iremos realizar o download da página da web 
-objeto_response = requests.get(endereco_da_pagina, headers=headers)
+for year_url in years_url:
 
-"""
-Agora criaremos um objeto BeautifulSoup a partir do nosso objeto_response.
-O parâmetro 'html.parser' representa qual parser usaremos na criação do nosso objeto,
-um parser é um software responsável por realizar a conversão de uma entrada para uma estrutura de dados.
-"""
-pagina_bs = BeautifulSoup(objeto_response.content, 'html.parser')
+    url = 'https://www.transfermarkt.com/premier-league/transfers/wettbewerb/GB1/plus/?saison_id=' + str(year_url) + '&s_w=&leihe=0&leihe=1&intern=0&intern=1'
 
+    response = requests.get(url, headers={'User-Agent': 'Custom5'})
+    # print(response.status_code)
+    financial_data = response.text
+    soup = BeautifulSoup(financial_data, 'html.parser')
 
-# Primeiro conseguiremos os nomes de cada jogador
-nomes_jogadores = [] # Lista ordenada dos nomes de todos os jogadores
+    grouped_data = soup.find('div', {'class': 'transferbilanz'})
 
-# O método find_all() consegue retornar todas as tags que cumprem as restrições dentro dos parênteses
-tags_jogadores = pagina_bs.find_all("a", {"class": "spielprofil_tooltip"})
-# No nosso caso estamos encontrando todas as âncoras com a classe "spielprofil_tooltip"
+    income = float(grouped_data.find_all('span', {'class': 'greentext'})[0].text.replace(',', '').replace('€', '')) * 0.89
+    income_per_club = float(grouped_data.find_all('span', {'class': 'greentext'})[1].text.replace('€', '').replace(',', '')) * 0.89
+    income_per_player = float(grouped_data.find_all('span', {'class': 'greentext'})[2].text.replace('€', '').replace(',', '')) * 0.89
+    year = year_url
 
-# Agora iremos conseguir somente os nomes de todos os jogadores
-for tag_jogador in tags_jogadores:
-    nomes_jogadores.append(tag_jogador.text)
+    income_list.append(income)
+    income_per_club_list.append(income_per_club)
+    income_per_player_list.append(income_per_player)
+    year_list.append(year)
 
 
-# Agora partiremos para o país da liga de origem de cada jogador
-pais_jogadores = [] # Lista ordenada dos nomes do país da liga de origem de todos os jogadores
+finance_df = pd.DataFrame({'Year': year_list,
+                           'Income': income_list,
+                           'Income_per_club': income_per_club_list,
+                           'Income_per_player': income_per_player_list
+                            })
 
-tags_ligas = pagina_bs.find_all("td",{"class": None})
-# Agora iremos receber todas as células da tabela que não possuem classe
-
-for tag_liga in tags_ligas:
-    # A função find irá encontrar a primeira imagem cuja classe é "flaggenrahmen" e possui um título
-    imagem_pais = tag_liga.find("img", {"class": "flaggenrahmen"}, {"title":True})
-    # A variável imagem_país será uma estrutura com todas as informações da imagem,
-    # uma delas é o title que contem o nome do país da bandeira
-    if(imagem_pais != None): # Testaremos se o método encontrou alguma correspondência
-        pais_jogadores.append(imagem_pais['title'])
-    
-
-# Por fim iremos conseguir as informacões de custo dos jogadores
-custos_jogadores = []
-
-tags_custos = pagina_bs.find_all("td", {"class": "rechts hauptlink"})
-
-for tag_custo in tags_custos:
-    texto_preco = tag_custo.text
-    # O texto do preço contém caracteres que não precisamos como £ (euros) e m (milhão) então iremos retirá-los
-    texto_preco = texto_preco.replace("£", "").replace("m","")
-    # Converteremos agora o valor para uma variável numérica
-    preco_numerico = float(texto_preco)
-    custos_jogadores.append(preco_numerico)
-
-# Criando um DataFrame a partir de nossos dados
-df = pd.DataFrame({"Jogador":nomes_jogadores,"Preço (milhão de euro)":custos_jogadores,"País de Origem":pais_jogadores})
-
-# Imprimindo os dados que obtemos
-print(df)
+finance_df.to_csv('Income_euro_to_pounds.csv', index=False)
+Income2004_18_df = pd.read_csv('Income_euro_to_pounds.csv')
